@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class MyAgent : BaseAgent
+public class XiuboAgent : BaseAgent
 {
     public BasicEngine engine;
     public TargetingSystem targetingSystem;
@@ -23,6 +23,37 @@ public class MyAgent : BaseAgent
      */
     public override void Run_6_1(Targetable target) {
         // HINT: control the turnThrottle and forwardThrottle on your engine to move
+        bool bStopping = false;
+        Vector3 toTarget = target.Position - transform.position;
+        toTarget.y = 0;
+        Vector3 targetDirection = toTarget.normalized;
+        Vector3 relativeDirection = targetDirection - transform.forward;
+        float dotProduct = Vector3.Dot(relativeDirection, transform.right);
+        if(dotProduct <= 0)
+            engine.turnThrottle = -1;
+        else if(dotProduct > 0)
+            engine.turnThrottle = 1;
+
+        float distance = toTarget.magnitude;
+        
+        if(!bStopping)
+        {
+            float decelDistance = engine.Speed * engine.Speed / engine.decel / 2;
+            if(distance <= decelDistance)
+                bStopping = true;
+        }
+            
+        if(distance < 1)
+            Debug.LogError(engine.Speed);
+
+        if(bStopping)
+        {
+            engine.forwardThrottle = -1;
+        }
+        else
+            engine.forwardThrottle = 1f;
+
+
     }
 
     /*
