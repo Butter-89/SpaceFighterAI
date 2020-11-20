@@ -8,6 +8,8 @@ public class XiuboAgent : BaseAgent
     public TargetingSystem targetingSystem;
     public IFireable weapon;
 
+    private float prevSpeed = 0f;
+    private bool bStopping = false;
     public override void Reset() {
         base.Reset();
         engine = ship.GetSystem<BasicEngine>();
@@ -23,7 +25,7 @@ public class XiuboAgent : BaseAgent
      */
     public override void Run_6_1(Targetable target) {
         // HINT: control the turnThrottle and forwardThrottle on your engine to move
-        bool bStopping = false;
+        
         Vector3 toTarget = target.Position - transform.position;
         toTarget.y = 0;
         Vector3 targetDirection = toTarget.normalized;
@@ -35,16 +37,23 @@ public class XiuboAgent : BaseAgent
             engine.turnThrottle = 1;
 
         float distance = toTarget.magnitude;
-        
         if(!bStopping)
         {
-            float decelDistance = engine.Speed * engine.Speed / engine.decel / 2;
+            float decelDistance = (2 * prevSpeed + engine.accel * Time.deltaTime) * Time.deltaTime / 2
+                                    + (prevSpeed + engine.accel * Time.deltaTime) * (prevSpeed + engine.accel * Time.deltaTime) / 2 / engine.decel;
             if(distance <= decelDistance)
                 bStopping = true;
+            else
+            {
+                bStopping = false;
+            }
         }
             
         if(distance < 1)
-            Debug.LogError(engine.Speed);
+        {
+            Debug.LogError(engine.Speed + "Throttle: " + engine.forwardThrottle);
+        }
+            
 
         if(bStopping)
         {
@@ -53,7 +62,7 @@ public class XiuboAgent : BaseAgent
         else
             engine.forwardThrottle = 1f;
 
-
+        prevSpeed = engine.Speed;
     }
 
     /*
