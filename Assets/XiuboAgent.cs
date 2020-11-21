@@ -15,6 +15,7 @@ public class XiuboAgent : BaseAgent
     private bool escaping = true;
     private float timer = 0f;
     private bool turningComplete = false;
+    private bool isDodging = false;
     public override void Reset() {
         base.Reset();
         engine = ship.GetSystem<BasicEngine>();
@@ -52,9 +53,13 @@ public class XiuboAgent : BaseAgent
         float forwardRate = Mathf.Clamp (1 - distance / 10, 0.5f, 1);
 
         if(bStopping)
-            engine.forwardThrottle = -1;
+        {
+            engine.forwardThrottle = distance > 10 ? -0.2f : -1f;
+        }
         else
-            engine.forwardThrottle = forwardRate;
+        {
+            engine.forwardThrottle = distance > 10 ? 1 : forwardRate;
+        }
 
         prevSpeed = engine.Speed;
     }
@@ -142,35 +147,80 @@ public class XiuboAgent : BaseAgent
             if(Vector3.Angle(transform.forward, toTarget.normalized) > 10)
                 return;
             else
-            {
                 turningComplete = true;
-            }
         }
         engine.forwardThrottle = 1f;
-
         // Detect if astroids ahead
-        Targetable obstacle = targetingSystem.ForwardScan();
+        Targetable obstacle = GetObstacleAhead();
         if (obstacle)
         {
-            // Detect side astroids
-            Targetable sideObstacle = GetCloserSideObstacle();
-            if (sideObstacle)
-            {
-                engine.turnThrottle = GetTurningDir(true, obstacle.Position);
-                engine.forwardThrottle = 0.5f;
-            }
-            engine.turnThrottle = GetTurningDir(true, obstacle.Position);
-            engine.forwardThrottle = 0.5f;
+            isDodging = true;
+            engine.turnThrottle = 0.7f * GetTurningDir(true, obstacle.Position);
+            engine.forwardThrottle = 0.7f;
+            //Targetable sideObstacle = GetObstacleLeftRightFront();
+            //if (sideObstacle)
+            //{
+            //    engine.turnThrottle = GetTurningDir(true, obstacle.Position);
+            //    engine.forwardThrottle = 0.5f;
+            //}
         }
-        
+        else
+            isDodging = false;
 
-        prevSpeed = engine.Speed;
     }
 
-    private Targetable GetCloserSideObstacle()
+    private Targetable GetClosestObstacle()
+    {
+        Vector3 dir_leftAhead = Quaternion.Euler(0, -30, 0) * transform.forward;
+        Vector3 dir_rightAhead = Quaternion.Euler(0, 30, 0) * transform.forward;
+        Targetable obstacleForward = null;
+        Targetable obstacleSide = null;
+
+        obstacleForward = targetingSystem.ForwardScan();
+        obstacleSide = engine.turnThrottle > 0 ? targetingSystem.DirectionScan(dir_rightAhead) : targetingSystem.DirectionScan(dir_leftAhead);
+
+        if (obstacleForward == null && obstacleSide == null)
+        {
+            return null;
+        }
+        if(obstacleForward || obstacleSide)
+        {
+            if (obstacleForward == null) return obstacleSide;
+        }
+
+        return null;
+    }
+
+    private Targetable GetObstacleAhead()
+    {
+        Targetable obstacle = targetingSystem.ForwardScan();
+        if (obstacle == null)
+            return null;
+
+        if (Vector3.Distance(transform.position, obstacle.Position) > 50)
+            return null;
+
+        return obstacle;
+    }
+
+    private Targetable GetSideObstacle()
     {
         Vector3 scanDirection = engine.turnThrottle > 0 ? transform.right : -transform.right;
         Targetable obstacle = targetingSystem.DirectionScan(transform.right);
+        if (obstacle == null)
+            return null;
+
+        if (Vector3.Distance(obstacle.Position, transform.position) > 5)
+            return null;
+        else
+            return obstacle;
+    }
+
+    private Targetable GetObstacleLeftRightFront()
+    {
+        Vector3 scanDirection = (engine.turnThrottle > 0 ? transform.right + transform.forward : -transform.right + transform.forward).normalized;
+        Targetable obstacle = targetingSystem.DirectionScan(transform.right);
+        Debug.DrawLine(transform.position, transform.position + scanDirection * 10, Color.green);
         if (obstacle == null)
             return null;
 
@@ -220,4 +270,5 @@ public class XiuboAgent : BaseAgent
     public override void Run_6_5() {
         
     }
+
 }
