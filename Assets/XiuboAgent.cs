@@ -152,11 +152,16 @@ public class XiuboAgent : BaseAgent
         engine.forwardThrottle = 1f;
         // Detect if astroids ahead
         Targetable obstacle = GetObstacleAhead();
+        
         if (obstacle)
         {
+            Debug.Log(obstacle.gameObject.name);
             isDodging = true;
             engine.turnThrottle = 0.7f * GetTurningDir(true, obstacle.Position);
             engine.forwardThrottle = 0.7f;
+            // See if there are obstacles in the direction of turning
+            // If obstacles are detected, fix the steering to avoid collision
+
             //Targetable sideObstacle = GetObstacleLeftRightFront();
             //if (sideObstacle)
             //{
@@ -175,6 +180,7 @@ public class XiuboAgent : BaseAgent
         Vector3 dir_rightAhead = Quaternion.Euler(0, 30, 0) * transform.forward;
         Targetable obstacleForward = null;
         Targetable obstacleSide = null;
+        Targetable obstacleLR = null;
 
         obstacleForward = targetingSystem.ForwardScan();
         obstacleSide = engine.turnThrottle > 0 ? targetingSystem.DirectionScan(dir_rightAhead) : targetingSystem.DirectionScan(dir_leftAhead);
@@ -186,6 +192,13 @@ public class XiuboAgent : BaseAgent
         if(obstacleForward || obstacleSide)
         {
             if (obstacleForward == null) return obstacleSide;
+            if (obstacleSide == null) return obstacleForward;
+            // Check which one is closer to determine the priority
+            float forward_Distance = Vector3.Distance(transform.position, obstacleForward.Position);
+            float side_Distance = Vector3.Distance(transform.position, obstacleSide.Position);
+            
+            if(forward_Distance < side_Distance) return obstacleForward;
+            else return obstacleSide;
         }
 
         return null;
