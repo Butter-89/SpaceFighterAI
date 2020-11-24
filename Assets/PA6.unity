@@ -6635,7 +6635,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 243542d9f18ce6c4aa4768c4b501ad2d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  progress: 3
+  progress: 2
   scores: 0000000000000000000000000000000000000000
   scoreLabels:
   - {fileID: 2067920433}

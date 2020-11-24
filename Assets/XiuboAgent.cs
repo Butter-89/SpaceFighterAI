@@ -4,6 +4,14 @@ using UnityEngine;
 
 public class XiuboAgent : BaseAgent
 {
+    public enum TargetType {
+        Ship,
+        Projectile,
+        Asteroid,
+        Pickup,
+        NavPoint
+    }
+
     public BasicEngine engine;
     public TargetingSystem targetingSystem;
     public IFireable weapon;
@@ -113,25 +121,7 @@ public class XiuboAgent : BaseAgent
      */
     public override void Run_6_3(Targetable target) {
         // HINT: aim where the target is moving to, not where it's currently at
-        BasicEngine enemyEngine = target.GetComponentInChildren<BasicEngine>();
-        Vector3 interception = target.Position + target.Velocity.normalized * enemyEngine.Speed * Time.deltaTime;
-
-        Vector3 toTarget = interception - transform.position;
-        Vector3 targetDirection = toTarget.normalized;
-        Vector3 relativeDirection = targetDirection - transform.forward;
-        float dotProduct = Vector3.Dot(relativeDirection, transform.right);
-        if (dotProduct <= 0)
-            engine.turnThrottle = -1;
-        else if (dotProduct > 0)
-            engine.turnThrottle = 1;
-        else
-            engine.turnThrottle = 0;
-
-        // Fire when possible
-        if (toTarget.magnitude < 30)
-            weapon.Fire();
-
-        engine.forwardThrottle = 1;
+        DogFight(target);
     }
 
     /*
@@ -281,7 +271,68 @@ public class XiuboAgent : BaseAgent
      * Your ship explodes if you leave the arena (radius of 1000 units from (0,0,0))
      */
     public override void Run_6_5() {
-        
+        Targetable enemyShip = FidnClosestTarget();
+
     }
 
+    private Targetable FidnClosestTarget()
+    {
+        targetables.Clear();
+        targetables = targetingSystem.Scan();
+        if(targetables.Count == 0)
+            return null;
+        else if (targetables.Count == 1)
+        {
+            return targetables[0];
+        }
+        else
+        {
+            Targetable closestTarget = targetables[0];
+            for(int i = 1; i < targetables.Count; i++)
+            {
+                if(targetables[i].type == Targetable.TargetType.Ship)
+                {
+                    float curDistance = Vector3.Distance(targetables[i].Position, transform.position);
+                    float minDistance = Vector3.Distance(closestTarget.Position, transform.position);
+                    if(curDistance < minDistance)
+                        closestTarget = targetables[i];
+                }
+            }
+
+            return closestTarget;
+        }
+    }
+
+    private void DogFight(Targetable target)
+    {
+        BasicEngine enemyEngine = target.GetComponentInChildren<BasicEngine>();
+        Vector3 interception = target.Position + target.Velocity.normalized * enemyEngine.Speed * Time.deltaTime;
+
+        Vector3 toTarget = interception - transform.position;
+        Vector3 targetDirection = toTarget.normalized;
+        Vector3 relativeDirection = targetDirection - transform.forward;
+        float dotProduct = Vector3.Dot(relativeDirection, transform.right);
+        if (dotProduct <= 0)
+            engine.turnThrottle = -1;
+        else if (dotProduct > 0)
+            engine.turnThrottle = 1;
+        else
+            engine.turnThrottle = 0;
+
+        // Fire when possible
+        if (toTarget.magnitude < 30)
+            weapon.Fire();
+
+        engine.forwardThrottle = 1;
+    }
+
+    private void AggressiveMode()
+    {
+
+    }
+
+    private void DefensiveMode()
+    {
+
+    }
 }
