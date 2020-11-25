@@ -12,6 +12,8 @@ public class XiuboAgent : BaseAgent
         NavPoint
     }
 
+    public enum DefenseMode { Disengage, CoveringFire, Hovering };
+
     public BasicEngine engine;
     public TargetingSystem targetingSystem;
     public IFireable weapon;
@@ -23,7 +25,10 @@ public class XiuboAgent : BaseAgent
     private bool escaping = true;
     private float timer = 0f;
     private bool turningComplete = false;
-    private bool isDodging = false;
+    private float rate = 1;
+    private bool bz = true;
+    private DefenseMode mode;
+    
     public override void Reset() {
         base.Reset();
         engine = ship.GetSystem<BasicEngine>();
@@ -33,6 +38,8 @@ public class XiuboAgent : BaseAgent
         timer = 0f;
         turningComplete = false;
         escaping = true;
+        rate = 1;
+        mode = DefenseMode.Disengage;
     }
 
     /*
@@ -121,7 +128,7 @@ public class XiuboAgent : BaseAgent
      */
     public override void Run_6_3(Targetable target) {
         // HINT: aim where the target is moving to, not where it's currently at
-        DogFight(target);
+        DogFight(target, 30);
     }
 
     /*
@@ -134,64 +141,71 @@ public class XiuboAgent : BaseAgent
         Vector3 toTarget = target.Position - transform.position;
         if (!turningComplete)
         {
-            if(Vector3.Angle(transform.forward, toTarget.normalized) > 10)
+            if (Vector3.Angle(transform.forward, toTarget.normalized) > 10)
                 return;
             else
                 turningComplete = true;
         }
         engine.forwardThrottle = 1f;
         // Detect if astroids ahead
-        Targetable obstacle = GetObstacleAhead();
-        
-        if (obstacle)
-        {
-            Debug.Log(obstacle.gameObject.name);
-            isDodging = true;
-            engine.turnThrottle = 0.7f * GetTurningDir(true, obstacle.Position);
-            engine.forwardThrottle = 0.7f;
-            // See if there are obstacles in the direction of turning
-            // If obstacles are detected, fix the steering to avoid collision
-
-            //Targetable sideObstacle = GetObstacleLeftRightFront();
-            //if (sideObstacle)
-            //{
-            //    engine.turnThrottle = GetTurningDir(true, obstacle.Position);
-            //    engine.forwardThrottle = 0.5f;
-            //}
-        }
-        else
-            isDodging = false;
-
+        AvoidObstacle();
     }
 
-    private Targetable GetClosestObstacle()
+    private void AvoidObstacle()
     {
-        Vector3 dir_leftAhead = Quaternion.Euler(0, -30, 0) * transform.forward;
-        Vector3 dir_rightAhead = Quaternion.Euler(0, 30, 0) * transform.forward;
-        Targetable obstacleForward = null;
+        Targetable obstacle = GetObstacleAhead();
+
+        if (obstacle)
+        {
+            engine.turnThrottle = 1f * GetTurningDir(true, obstacle.Position);
+            //engine.forwardThrottle = 0.7f;
+
+            // See if there are obstacles in the direction of turning
+            // If obstacles are detected, fix the steering to avoid collision
+            Targetable sideObstacle = GetClosestObstacle(45);
+            if (sideObstacle)
+            {
+                float aheadDistance = Vector3.Distance(transform.position, obstacle.Position);
+                float sideDistance = DetectAstroidDistance(45, 40);
+                if (sideDistance < aheadDistance)
+                {
+                    engine.turnThrottle = GetTurningDir(true, sideObstacle.Position);
+                }
+            }
+        }
+        else
+        {
+            if (DetectAstroidDistance(45, 40) <= 40)
+            {
+                engine.turnThrottle *= -1;
+            }
+        }
+    }
+
+    private Targetable GetClosestObstacle(float angle)
+    {
+        Vector3 dir_leftAhead = Quaternion.Euler(0, -angle, 0) * transform.forward;
+        Vector3 dir_rightAhead = Quaternion.Euler(0, angle, 0) * transform.forward;
         Targetable obstacleSide = null;
-        Targetable obstacleLR = null;
 
-        obstacleForward = targetingSystem.ForwardScan();
         obstacleSide = engine.turnThrottle > 0 ? targetingSystem.DirectionScan(dir_rightAhead) : targetingSystem.DirectionScan(dir_leftAhead);
+        return obstacleSide;
+    }
 
-        if (obstacleForward == null && obstacleSide == null)
-        {
-            return null;
-        }
-        if(obstacleForward || obstacleSide)
-        {
-            if (obstacleForward == null) return obstacleSide;
-            if (obstacleSide == null) return obstacleForward;
-            // Check which one is closer to determine the priority
-            float forward_Distance = Vector3.Distance(transform.position, obstacleForward.Position);
-            float side_Distance = Vector3.Distance(transform.position, obstacleSide.Position);
-            
-            if(forward_Distance < side_Distance) return obstacleForward;
-            else return obstacleSide;
-        }
+    private float DetectAstroidDistance(float angle, float distance)
+    {
+        Vector3 dir_left = Quaternion.Euler(0, -angle, 0) * transform.forward;
+        Vector3 dir_right = Quaternion.Euler(0, angle, 0) * transform.forward;
+        Vector3 scanDirection = engine.turnThrottle > 0 ? dir_right : dir_left;
 
-        return null;
+        RaycastHit hit;
+        Ray ray = new Ray(transform.position, scanDirection);
+        if (Physics.Raycast(ray, out hit, distance))
+        {
+            float distanceToHit = Vector3.Distance(transform.position, hit.point);
+            return distanceToHit;
+        }
+        return 99999;
     }
 
     private Targetable GetObstacleAhead()
@@ -272,21 +286,37 @@ public class XiuboAgent : BaseAgent
      */
     public override void Run_6_5() {
         Targetable enemyShip = FidnClosestTarget();
-
+        //if (enemyShip && bz)
+        //    DogFight(enemyShip, 40);
+        //else
+        //    DefensiveMode();
+        if (enemyShip)
+            DogFight(enemyShip,50);
+        else
+            DefensiveMode();
     }
 
     private Targetable FidnClosestTarget()
     {
         targetables.Clear();
         targetables = targetingSystem.Scan();
+        Targetable target = null;
+        for (int i = targetables.Count - 1; i >= 0; i--)
+        {
+            if (Targetable.TargetType.Ship != targetables[i].type)
+                targetables.RemoveAt(i);
+        }
+
         if(targetables.Count == 0)
             return null;
         else if (targetables.Count == 1)
         {
-            return targetables[0];
+            if(Targetable.TargetType.Ship == targetables[0].type)
+                return targetables[0];
         }
         else
         {
+
             Targetable closestTarget = targetables[0];
             for(int i = 1; i < targetables.Count; i++)
             {
@@ -301,9 +331,11 @@ public class XiuboAgent : BaseAgent
 
             return closestTarget;
         }
+
+        return target;
     }
 
-    private void DogFight(Targetable target)
+    private void DogFight(Targetable target, float attackRange, float disengageRange = 40)
     {
         BasicEngine enemyEngine = target.GetComponentInChildren<BasicEngine>();
         Vector3 interception = target.Position + target.Velocity.normalized * enemyEngine.Speed * Time.deltaTime;
@@ -319,20 +351,68 @@ public class XiuboAgent : BaseAgent
         else
             engine.turnThrottle = 0;
 
+        //weapon.Fire();
         // Fire when possible
-        if (toTarget.magnitude < 30)
+        if (toTarget.magnitude < attackRange)
             weapon.Fire();
 
         engine.forwardThrottle = 1;
+
+        //if (toTarget.magnitude < disengageRange)
+        //{
+        //    bz = false;
+        //    timer = 3f;
+        //    int modeIndex = Random.Range(0, 1);
+        //    switch(modeIndex)
+        //    {
+        //        case 0:
+        //            mode = DefenseMode.Disengage;
+        //            break;
+        //        case 1:
+        //            mode = DefenseMode.CoveringFire;
+        //            break;
+        //    }
+        //}
+            
     }
 
-    private void AggressiveMode()
+    private void Hovering()
     {
-
+        engine.turnThrottle = 1;
+        engine.forwardThrottle = 1;
     }
 
     private void DefensiveMode()
     {
+        if(mode == DefenseMode.Disengage)
+        {
+            // Perform random movement 
+            steering = Mathf.Clamp((float)(steering - rate * 0.2 * Time.deltaTime), 0, 1);
+            if (steering == 0)
+            {
+                rate = -1;
+            }
 
+            engine.turnThrottle = steering;
+            engine.forwardThrottle = 1;
+        }
+        else if(mode == DefenseMode.CoveringFire)
+        {
+            engine.turnThrottle = 1;
+            weapon.Fire();
+        }
+        else if(mode == DefenseMode.Hovering)
+        {
+            engine.turnThrottle = 1;
+            engine.forwardThrottle = 1;
+
+            AvoidObstacle();
+        }
+
+        timer -= Time.deltaTime;
+        if(timer <= 0)
+        {
+            bz = true;
+        }
     }
 }
